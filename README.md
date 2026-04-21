@@ -1,19 +1,37 @@
-# Container Calculator 📦
+# 📦 Container Calculator
 
-A 3D shipping container space planner for international moves. Add rooms and items, visualize how they fit inside a 20ft or 40ft shipping container, and get real-time fill percentage calculations.
+A 3D shipping container space planner for international moves. Visualize how your furniture and boxes fit inside a 20ft or 40ft shipping container.
 
-![Container Calculator](screenshot.png)
+**[Live App →](https://macat.github.io/container-calculator/)**
 
 ## Features
 
-- **Room-based organization** — Add rooms and items with dimensions
-- **3D visualization** — See items packed inside the container using Three.js
-- **Color-coded by room** — Each room gets a distinct color
-- **Container toggle** — Switch between 20ft and 40ft containers
-- **Real-time stats** — Fill percentage, used/remaining volume
-- **Bin packing** — Simple bottom-up, back-to-front packing algorithm
-- **Pre-populated** — Comes loaded with a sample NYC→Budapest move inventory
-- **No build step** — Open `index.html` directly in any browser
+- **Room-by-room inventory** — Add rooms and items with dimensions (L×W×H)
+- **3D visualization** — Three.js-powered view with color-coded items packed inside a wireframe container
+- **20ft / 40ft toggle** — Switch between container sizes with real-time fill percentage
+- **Box presets** — Quick-add wardrobe, book, medium, small, and artwork boxes
+- **Share layouts** — Compress state into a URL and share with your shipping company
+- **Export PDF** — Download a PDF with 3D snapshot + full inventory list
+- **Orbitable camera** — Spin, zoom, and inspect the packing layout
+- **Wireframe mode** — Toggle to see through packed items
+
+## Sharing
+
+Click **🔗 Share** to generate a shareable URL. The entire container layout is compressed into the URL hash — no backend needed. Anyone with the link sees the exact same configuration and can edit it freely.
+
+## Export
+
+Click **📄 Export PDF** to download a professional PDF including:
+- Container size and fill percentage
+- 3D visualization snapshot
+- Room-by-room inventory with dimensions and volumes
+
+## Tech
+
+- Vanilla HTML/CSS/JS — no build step, just open `index.html`
+- [Three.js](https://threejs.org/) for 3D rendering
+- [lz-string](https://pieroxy.net/blog/pages/lz-string/index.html) for URL state compression
+- [jsPDF](https://github.com/parallax/jsPDF) + [html2canvas](https://html2canvas.hertzen.com/) for PDF export
 
 ## Container Specs
 
@@ -21,20 +39,6 @@ A 3D shipping container space planner for international moves. Add rooms and ite
 |-----------|-------------------|--------|
 | 20ft | 232" × 92" × 94" | 1,172 cu ft |
 | 40ft | 473" × 92" × 94" | 2,390 cu ft |
-
-## Usage
-
-1. Clone the repo
-2. Open `index.html` in a browser
-3. Add/remove rooms and items
-4. Toggle container size
-5. Orbit the 3D view to inspect the packing
-
-## Tech
-
-- Vanilla HTML/CSS/JS
-- [Three.js](https://threejs.org/) for 3D rendering (loaded via CDN)
-- No backend, no build tools, no dependencies to install
 
 ## License
 

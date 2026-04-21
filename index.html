@@ -8,15 +8,28 @@
 </head>
 <body>
   <div id="app">
+    <!-- Shared layout banner -->
+    <div id="shared-banner" class="shared-banner" style="display:none">
+      📎 Shared container layout — edit freely
+      <button class="banner-dismiss" onclick="dismissBanner()">✕</button>
+    </div>
+
     <header>
       <h1>📦 Container Calculator</h1>
       <div class="header-controls">
+        <div class="toolbar-actions">
+          <button class="toolbar-btn" onclick="shareLayout()" title="Copy shareable link">🔗 Share</button>
+          <button class="toolbar-btn" onclick="exportPDF()" title="Export as PDF">📄 Export PDF</button>
+        </div>
         <div class="container-toggle">
           <button id="btn-20ft" class="toggle-btn active" onclick="setContainer(20)">20ft</button>
           <button id="btn-40ft" class="toggle-btn" onclick="setContainer(40)">40ft</button>
         </div>
       </div>
     </header>
+
+    <!-- Toast notification -->
+    <div id="toast" class="toast"></div>
 
     <div class="main-layout">
       <!-- Left panel: rooms & items -->
@@ -111,6 +124,9 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

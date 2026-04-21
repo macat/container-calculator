@@ -119,7 +119,10 @@ function getDefaultRooms() {
 // INIT
 // ============================================================
 function init() {
-  rooms = getDefaultRooms();
+  // Check for shared state in URL hash first
+  if (!loadFromHash()) {
+    rooms = getDefaultRooms();
+  }
   initThree();
   renderAll();
   window.addEventListener('resize', onResize);
@@ -322,7 +325,7 @@ function initThree() {
 
   camera = new THREE.PerspectiveCamera(50, el.clientWidth / el.clientHeight, 0.1, 100);
 
-  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(el.clientWidth, el.clientHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   el.appendChild(renderer.domElement);
@@ -571,3 +574,229 @@ function binPack(cont) {
 // INIT ON LOAD
 // ============================================================
 window.addEventListener('DOMContentLoaded', init);
+
+// ============================================================
+// SHARE / SAVE — URL-based state persistence
+// ============================================================
+function getState() {
+  return {
+    v: 1,
+    containerSize,
+    rooms: rooms.map(r => ({
+      name: r.name,
+      items: r.items.map(it => ({
+        name: it.name, l: it.l, w: it.w, h: it.h, qty: it.qty
+      }))
+    }))
+  };
+}
+
+function setState(state) {
+  if (!state || !state.rooms) return false;
+  containerSize = state.containerSize || 20;
+  document.getElementById('btn-20ft').classList.toggle('active', containerSize === 20);
+  document.getElementById('btn-40ft').classList.toggle('active', containerSize === 40);
+
+  nextRoomId = 1;
+  nextItemId = 1;
+  rooms = state.rooms.map(r => ({
+    id: nextRoomId++,
+    name: r.name,
+    collapsed: true,
+    items: (r.items || []).map(it => ({
+      id: nextItemId++,
+      name: it.name, l: it.l, w: it.w, h: it.h, qty: it.qty
+    }))
+  }));
+  return true;
+}
+
+function loadFromHash() {
+  const hash = window.location.hash;
+  if (!hash || hash.length < 2) return false;
+  try {
+    const compressed = hash.substring(1);
+    const json = LZString.decompressFromEncodedURIComponent(compressed);
+    if (!json) return false;
+    const state = JSON.parse(json);
+    if (setState(state)) {
+      document.getElementById('shared-banner').style.display = 'block';
+      return true;
+    }
+  } catch (e) {
+    console.warn('Failed to load state from URL:', e);
+  }
+  return false;
+}
+
+function shareLayout() {
+  const state = getState();
+  const json = JSON.stringify(state);
+  const compressed = LZString.compressToEncodedURIComponent(json);
+  const url = window.location.origin + window.location.pathname + '#' + compressed;
+
+  // Update URL without reload
+  history.replaceState(null, '', '#' + compressed);
+
+  // Copy to clipboard
+  navigator.clipboard.writeText(url).then(() => {
+    showToast('🔗 Link copied! Share this URL with your shipping company');
+  }).catch(() => {
+    // Fallback: select a temporary textarea
+    const ta = document.createElement('textarea');
+    ta.value = url;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('🔗 Link copied! Share this URL with your shipping company');
+  });
+}
+
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => toast.classList.remove('show'), 3500);
+}
+
+function dismissBanner() {
+  document.getElementById('shared-banner').style.display = 'none';
+}
+
+// ============================================================
+// EXPORT PDF
+// ============================================================
+async function exportPDF() {
+  showToast('📄 Generating PDF…');
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  const pageW = 210;
+  const margin = 15;
+  const contentW = pageW - margin * 2;
+  let y = margin;
+
+  // --- Header ---
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Container Calculator', margin, y + 7);
+  y += 12;
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100);
+  doc.text('Generated ' + new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }), margin, y);
+  y += 10;
+
+  // --- Stats ---
+  const cont = CONTAINERS[containerSize];
+  const totalVol = (cont.lengthIn * cont.widthIn * cont.heightIn / 1728).toFixed(0);
+  const usedVol = totalUsedCuFt().toFixed(0);
+  const pct = ((usedVol / totalVol) * 100).toFixed(1);
+  const itemCount = totalItemCount();
+
+  doc.setTextColor(0);
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`${cont.label} Container`, margin, y);
+  y += 6;
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Used: ${usedVol} cu ft / ${totalVol} cu ft (${pct}%)    |    Items: ${itemCount}`, margin, y);
+  y += 4;
+
+  // Fill bar
+  doc.setDrawColor(180);
+  doc.setFillColor(230, 230, 230);
+  doc.roundedRect(margin, y, contentW, 5, 1, 1, 'FD');
+  const fillW = Math.min(contentW, contentW * parseFloat(pct) / 100);
+  const barR = pct > 90 ? 220 : pct > 70 ? 200 : 60;
+  const barG = pct > 90 ? 60 : pct > 70 ? 170 : 180;
+  const barB = pct > 90 ? 60 : pct > 70 ? 40 : 80;
+  doc.setFillColor(barR, barG, barB);
+  doc.roundedRect(margin, y, fillW, 5, 1, 1, 'F');
+  y += 10;
+
+  // --- 3D Snapshot ---
+  try {
+    const canvas = renderer.domElement;
+    const imgData = canvas.toDataURL('image/png');
+    const imgW = contentW;
+    const imgH = imgW * (canvas.height / canvas.width);
+    if (y + imgH > 280) { doc.addPage(); y = margin; }
+    doc.addImage(imgData, 'PNG', margin, y, imgW, imgH);
+    y += imgH + 6;
+  } catch (e) {
+    console.warn('Could not capture 3D view:', e);
+  }
+
+  // --- Room-by-room inventory ---
+  rooms.forEach((room, ri) => {
+    const roomVol = roomVolumeCuFt(room);
+    const roomItemCount = room.items.reduce((s, it) => s + it.qty, 0);
+
+    // Check if we need a new page
+    if (y > 260) { doc.addPage(); y = margin; }
+
+    // Room header
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0);
+    const color = ROOM_COLORS[ri % ROOM_COLORS.length];
+    const r = parseInt(color.slice(1, 3), 16);
+    const g = parseInt(color.slice(3, 5), 16);
+    const b = parseInt(color.slice(5, 7), 16);
+    doc.setFillColor(r, g, b);
+    doc.circle(margin + 2, y - 1.2, 1.8, 'F');
+    doc.text(`  ${room.name}`, margin + 2, y);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(120);
+    doc.text(`${roomItemCount} items · ${roomVol} cu ft`, margin + doc.getTextWidth(`  ${room.name}  `) + 4, y);
+    y += 5;
+
+    // Table header
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(100);
+    doc.text('Item', margin + 2, y);
+    doc.text('Qty', margin + 100, y);
+    doc.text('Dimensions', margin + 115, y);
+    doc.text('Vol (ft³)', margin + 150, y);
+    y += 1;
+    doc.setDrawColor(200);
+    doc.line(margin, y, margin + contentW, y);
+    y += 3;
+
+    // Items
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(40);
+    room.items.forEach(it => {
+      if (y > 280) { doc.addPage(); y = margin; }
+      const vol = ((it.l * it.w * it.h * it.qty) / 1728).toFixed(1);
+      doc.setFontSize(8);
+      doc.text(it.name, margin + 2, y, { maxWidth: 95 });
+      doc.text(String(it.qty), margin + 102, y);
+      doc.text(`${it.l}×${it.w}×${it.h}"`, margin + 115, y);
+      doc.text(vol, margin + 155, y);
+      y += 4;
+    });
+    y += 4;
+  });
+
+  // --- Footer ---
+  const pageCount = doc.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(7);
+    doc.setTextColor(160);
+    doc.text(`Container Calculator — Page ${i}/${pageCount}`, margin, 290);
+  }
+
+  doc.save(`container-${cont.label}-${new Date().toISOString().slice(0,10)}.pdf`);
+  showToast('📄 PDF downloaded!');
+}
