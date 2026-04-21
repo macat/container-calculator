@@ -410,6 +410,62 @@ header h1 {
   min-width: 0;
 }
 
+.item-name.editable,
+.item-dims.editable {
+  cursor: pointer;
+  border-bottom: 1px dashed transparent;
+  transition: border-color 0.15s;
+}
+
+.item-name.editable:hover,
+.item-dims.editable:hover {
+  border-bottom-color: var(--accent);
+}
+
+/* Inline edit inputs */
+.inline-edit-input {
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 0.88rem;
+  padding: 2px 6px;
+  outline: none;
+  flex: 1;
+  min-width: 0;
+}
+
+.inline-dims-edit {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.inline-dim-input {
+  width: 42px;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 0.78rem;
+  padding: 2px 4px;
+  text-align: center;
+  outline: none;
+  -moz-appearance: textfield;
+}
+
+.inline-dim-input::-webkit-inner-spin-button,
+.inline-dim-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.inline-dim-sep {
+  color: var(--text-dim);
+  font-size: 0.72rem;
+}
+
 .item-dims {
   color: var(--text-dim);
   font-size: 0.78rem;

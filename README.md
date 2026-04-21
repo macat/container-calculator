@@ -1,44 +1,35 @@
-# 📦 Container Calculator
+# 📦 Container Space Calculator
 
-A 3D shipping container space planner for international moves. Visualize how your furniture and boxes fit inside a 20ft or 40ft shipping container.
+Interactive 3D shipping container calculator. Add your items, see how they fit in a 20ft or 40ft container, and share the layout with your moving company.
 
-**[Live App →](https://macat.github.io/container-calculator/)**
+**[Live Demo →](https://macat.github.io/container-calculator/)**
 
 ## Features
 
-- **Room-by-room inventory** — Add rooms and items with dimensions (L×W×H)
-- **3D visualization** — Three.js-powered view with color-coded items packed inside a wireframe container
-- **20ft / 40ft toggle** — Switch between container sizes with real-time fill percentage
-- **Box presets** — Quick-add wardrobe, book, medium, small, and artwork boxes
-- **Share layouts** — Compress state into a URL and share with your shipping company
-- **Export PDF** — Download a PDF with 3D snapshot + full inventory list
-- **Orbitable camera** — Spin, zoom, and inspect the packing layout
-- **Wireframe mode** — Toggle to see through packed items
+- **3D bin-packing visualization** — Maximal Rectangles algorithm with 6-rotation support
+- **Room-based inventory** — organize items by room with color coding
+- **Inline editing** — click any item name or dimensions to edit in-place
+- **20ft / 40ft toggle** — switch container sizes instantly
+- **Hover cross-highlighting** — hover items in the list or 3D view to highlight both
+- **Share via URL** — compressed state in the URL hash, no server needed
+- **PDF export** — download a full inventory report with 3D snapshot
+- **Box presets** — quick-add common box sizes (wardrobe, book, medium, small, artwork)
 
-## Sharing
+## How It Works
 
-Click **🔗 Share** to generate a shareable URL. The entire container layout is compressed into the URL hash — no backend needed. Anyone with the link sees the exact same configuration and can edit it freely.
-
-## Export
-
-Click **📄 Export PDF** to download a professional PDF including:
-- Container size and fill percentage
-- 3D visualization snapshot
-- Room-by-room inventory with dimensions and volumes
+1. Add rooms and items with dimensions (in inches)
+2. The packing algorithm places items largest-first, trying all rotations
+3. Items are packed bottom-up, flush against walls and each other
+4. If items don't fit, an overflow warning shows how much excess volume there is
+5. Click **Share** to copy a URL with your full inventory encoded in it
 
 ## Tech
 
-- Vanilla HTML/CSS/JS — no build step, just open `index.html`
+Pure HTML/CSS/JS — no build step, no server.
+
 - [Three.js](https://threejs.org/) for 3D rendering
-- [lz-string](https://pieroxy.net/blog/pages/lz-string/index.html) for URL state compression
-- [jsPDF](https://github.com/parallax/jsPDF) + [html2canvas](https://html2canvas.hertzen.com/) for PDF export
-
-## Container Specs
-
-| Container | Internal Dimensions | Volume |
-|-----------|-------------------|--------|
-| 20ft | 232" × 92" × 94" | 1,172 cu ft |
-| 40ft | 473" × 92" × 94" | 2,390 cu ft |
+- [lz-string](https://github.com/pieroxy/lz-string) for URL compression
+- [jsPDF](https://github.com/parallax/jsPDF) for PDF export
 
 ## License
 

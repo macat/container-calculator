@@ -1,5 +1,5 @@
 // ============================================================
-// Container Calculator — app.js (v2 — with fixes)
+// Container Calculator — app.js (v3 — LAFF packing + inline edit)
 // ============================================================
 
 // --- Constants ---
@@ -31,9 +31,9 @@ let addItemTargetRoomId = null;
 let wireframeMode = false;
 
 // --- Hover / highlight state ---
-let highlightedItemId = null;   // item id currently hovered in list
-let hoveredMeshItemId = null;   // item id currently hovered in 3D
-let packedMeshes = [];          // array of { mesh, edgeMesh, itemId, roomId, color }
+let highlightedItemId = null;
+let hoveredMeshItemId = null;
+let packedMeshes = [];
 let raycaster, mouse;
 
 // --- Three.js globals ---
@@ -41,81 +41,45 @@ let scene, camera, renderer, controls;
 let containerGroup, itemsGroup;
 
 // ============================================================
-// DATA: Pre-populated inventory
+// DATA: Generic example inventory
 // ============================================================
 function getDefaultRooms() {
   return [
     {
-      id: nextRoomId++, name: 'Living Room / Dining', collapsed: true,
+      id: nextRoomId++, name: 'Living Room', collapsed: false,
       items: [
-        { id: nextItemId++, name: 'L-shaped Sectional Sofa', l: 100, w: 80, h: 35, qty: 1 },
-        { id: nextItemId++, name: 'Leather Accent Chair',    l: 30,  w: 30, h: 35, qty: 1 },
-        { id: nextItemId++, name: 'Round Coffee Table',      l: 36,  w: 36, h: 18, qty: 1 },
-        { id: nextItemId++, name: 'Dining Table',            l: 60,  w: 35, h: 30, qty: 1 },
-        { id: nextItemId++, name: 'Eames DSR Chair',         l: 18,  w: 20, h: 32, qty: 6 },
-        { id: nextItemId++, name: '78" TV Crate',            l: 75,  w: 8,  h: 45, qty: 1 },
-        { id: nextItemId++, name: 'Wood Bookshelf (Reseda)', l: 40,  w: 15, h: 72, qty: 1 },
-        { id: nextItemId++, name: 'Vitsoe Shelving (disasm)',l: 48,  w: 12, h: 6,  qty: 1 },
-        { id: nextItemId++, name: 'Digital Piano (Roland)',  l: 55,  w: 16, h: 35, qty: 1 },
-        { id: nextItemId++, name: 'Piano Bench',             l: 30,  w: 14, h: 20, qty: 1 },
-        { id: nextItemId++, name: 'Sonos Sub',               l: 14,  w: 14, h: 15, qty: 1 },
-        { id: nextItemId++, name: 'Robot Vacuum',            l: 14,  w: 14, h: 5,  qty: 1 },
+        { id: nextItemId++, name: 'Sofa',            l: 80, w: 35, h: 30, qty: 1 },
+        { id: nextItemId++, name: 'Coffee Table',    l: 48, w: 24, h: 18, qty: 1 },
+        { id: nextItemId++, name: 'Bookshelf',       l: 36, w: 12, h: 72, qty: 1 },
+        { id: nextItemId++, name: 'TV (crated)',     l: 65, w: 6,  h: 38, qty: 1 },
+        { id: nextItemId++, name: 'Floor Lamp Box',  l: 12, w: 12, h: 60, qty: 1 },
+        { id: nextItemId++, name: 'Accent Chair',    l: 30, w: 28, h: 32, qty: 2 },
       ]
     },
     {
-      id: nextRoomId++, name: "Kids' Room", collapsed: true,
+      id: nextRoomId++, name: 'Bedroom', collapsed: true,
       items: [
-        { id: nextItemId++, name: 'Twin Bed Frame',           l: 75, w: 40, h: 12, qty: 2 },
-        { id: nextItemId++, name: 'Twin Mattress',            l: 75, w: 38, h: 10, qty: 2 },
-        { id: nextItemId++, name: 'Daybed',                   l: 75, w: 30, h: 14, qty: 1 },
-        { id: nextItemId++, name: 'Vitsoe Shelving (disasm)', l: 48, w: 12, h: 6,  qty: 1 },
-        { id: nextItemId++, name: 'Desk',                     l: 40, w: 20, h: 30, qty: 1 },
-        { id: nextItemId++, name: 'IKEA ALEX Drawer Unit',    l: 14, w: 19, h: 28, qty: 1 },
-        { id: nextItemId++, name: 'Desk Chair',               l: 20, w: 20, h: 32, qty: 1 },
+        { id: nextItemId++, name: 'Bed Frame',   l: 80, w: 60, h: 14, qty: 1 },
+        { id: nextItemId++, name: 'Mattress',    l: 80, w: 60, h: 10, qty: 1 },
+        { id: nextItemId++, name: 'Dresser',     l: 60, w: 18, h: 32, qty: 1 },
+        { id: nextItemId++, name: 'Nightstand',  l: 20, w: 16, h: 24, qty: 2 },
       ]
     },
     {
-      id: nextRoomId++, name: "Parents' Bedroom", collapsed: true,
+      id: nextRoomId++, name: 'Office', collapsed: true,
       items: [
-        { id: nextItemId++, name: 'King Bed Frame',   l: 82, w: 76, h: 12, qty: 1 },
-        { id: nextItemId++, name: 'King Mattress',    l: 80, w: 76, h: 12, qty: 1 },
-        { id: nextItemId++, name: 'Nightstand',       l: 15, w: 15, h: 20, qty: 1 },
-        { id: nextItemId++, name: 'Table Lamp Box',   l: 12, w: 12, h: 18, qty: 1 },
-        { id: nextItemId++, name: 'Area Rug (rolled)',l: 60, w: 12, h: 12, qty: 1 },
+        { id: nextItemId++, name: 'Desk',            l: 60, w: 30, h: 30, qty: 1 },
+        { id: nextItemId++, name: 'Office Chair',    l: 24, w: 24, h: 36, qty: 1 },
+        { id: nextItemId++, name: 'Monitor Box',     l: 28, w: 8,  h: 18, qty: 1 },
+        { id: nextItemId++, name: 'Filing Cabinet',  l: 15, w: 24, h: 28, qty: 1 },
       ]
     },
     {
-      id: nextRoomId++, name: 'Office / Guest Room', collapsed: true,
+      id: nextRoomId++, name: 'Boxes', collapsed: true,
       items: [
-        { id: nextItemId++, name: 'Vitsoe + Drawers (disasm)', l: 60, w: 16, h: 8,  qty: 1 },
-        { id: nextItemId++, name: 'Large Desk',                l: 60, w: 30, h: 30, qty: 1 },
-        { id: nextItemId++, name: 'Ultrawide Monitor Box',     l: 40, w: 12, h: 24, qty: 1 },
-        { id: nextItemId++, name: 'Canon PRO Printer',         l: 28, w: 20, h: 12, qty: 1 },
-        { id: nextItemId++, name: 'Printer Cart',              l: 24, w: 18, h: 30, qty: 1 },
-        { id: nextItemId++, name: 'Turntable Box',             l: 20, w: 16, h: 8,  qty: 1 },
-        { id: nextItemId++, name: 'Amplifier Box',             l: 18, w: 14, h: 8,  qty: 1 },
-        { id: nextItemId++, name: 'Floor Lamp Box',            l: 60, w: 8,  h: 8,  qty: 1 },
-        { id: nextItemId++, name: 'Equipment Case',            l: 24, w: 18, h: 10, qty: 1 },
-      ]
-    },
-    {
-      id: nextRoomId++, name: 'Boxes — Wardrobes', collapsed: true,
-      items: [
-        { id: nextItemId++, name: 'Wardrobe Box (Kids)',    l: 24, w: 21, h: 46, qty: 3 },
-        { id: nextItemId++, name: 'Wardrobe Box (Parents)', l: 24, w: 21, h: 46, qty: 3 },
-        { id: nextItemId++, name: 'Wardrobe Box (Hallway)', l: 24, w: 21, h: 46, qty: 3 },
-      ]
-    },
-    {
-      id: nextRoomId++, name: 'Boxes — Contents', collapsed: true,
-      items: [
-        { id: nextItemId++, name: 'Book Box',    l: 18, w: 18, h: 16, qty: 6 },
-        { id: nextItemId++, name: 'Vinyl Record Box', l: 18, w: 18, h: 16, qty: 5 },
-        { id: nextItemId++, name: 'Medium Box (Kitchen)',  l: 18, w: 18, h: 24, qty: 5 },
-        { id: nextItemId++, name: 'Medium Box (Hallway Cabinets)', l: 18, w: 18, h: 24, qty: 6 },
-        { id: nextItemId++, name: 'Medium Box (Misc)',  l: 18, w: 18, h: 24, qty: 5 },
-        { id: nextItemId++, name: 'Small Box (Bathroom)', l: 16, w: 12, h: 12, qty: 2 },
-        { id: nextItemId++, name: 'Artwork Box', l: 40, w: 6, h: 30, qty: 2 },
+        { id: nextItemId++, name: 'Medium Box',   l: 18, w: 18, h: 24, qty: 10 },
+        { id: nextItemId++, name: 'Book Box',     l: 18, w: 18, h: 16, qty: 5 },
+        { id: nextItemId++, name: 'Wardrobe Box', l: 24, w: 21, h: 46, qty: 2 },
       ]
     },
   ];
@@ -175,22 +139,142 @@ function renderRooms() {
 function itemRowHTML(it, roomId) {
   const vol = ((it.l * it.w * it.h * it.qty) / 1728).toFixed(1);
   return `
-    <div class="item-row" data-item-id="${it.id}"
+    <div class="item-row" data-item-id="${it.id}" data-room-id="${roomId}"
          onmouseenter="highlightItem(${it.id})"
          onmouseleave="unhighlightItem()">
-      <span class="item-name">${esc(it.name)}</span>
+      <span class="item-name editable" onclick="startEditName(event, ${roomId}, ${it.id})"
+            title="Click to edit name">${esc(it.name)}</span>
       <div class="qty-controls">
         <button class="qty-btn" onclick="event.stopPropagation(); changeQty(${roomId}, ${it.id}, -1)" title="Decrease">−</button>
         <span class="item-qty-value">${it.qty}</span>
         <button class="qty-btn" onclick="event.stopPropagation(); changeQty(${roomId}, ${it.id}, 1)" title="Increase">+</button>
       </div>
-      <span class="item-dims">${it.l}×${it.w}×${it.h}"</span>
+      <span class="item-dims editable" onclick="startEditDims(event, ${roomId}, ${it.id})"
+            title="Click to edit dimensions">${it.l}×${it.w}×${it.h}"</span>
       <span class="item-vol">${vol} ft³</span>
       <button class="btn-remove-item" onclick="removeItem(${roomId}, ${it.id})" title="Remove">✕</button>
     </div>
   `;
 }
 
+// ============================================================
+// INLINE EDITING
+// ============================================================
+function startEditName(event, roomId, itemId) {
+  event.stopPropagation();
+  const span = event.currentTarget;
+  const room = rooms.find(r => r.id === roomId);
+  if (!room) return;
+  const item = room.items.find(it => it.id === itemId);
+  if (!item) return;
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'inline-edit-input';
+  input.value = item.name;
+  input.style.width = Math.max(80, span.offsetWidth + 20) + 'px';
+
+  let committed = false;
+  function commit() {
+    if (committed) return;
+    committed = true;
+    const val = input.value.trim();
+    if (val && val !== item.name) {
+      item.name = val;
+      renderAll();
+    } else {
+      span.style.display = '';
+      input.remove();
+    }
+  }
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    if (e.key === 'Escape') { committed = true; span.style.display = ''; input.remove(); }
+  });
+  input.addEventListener('blur', commit);
+
+  span.style.display = 'none';
+  span.parentNode.insertBefore(input, span);
+  input.focus();
+  input.select();
+}
+
+function startEditDims(event, roomId, itemId) {
+  event.stopPropagation();
+  const span = event.currentTarget;
+  const room = rooms.find(r => r.id === roomId);
+  if (!room) return;
+  const item = room.items.find(it => it.id === itemId);
+  if (!item) return;
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'inline-dims-edit';
+
+  const fields = ['l', 'w', 'h'].map(dim => {
+    const inp = document.createElement('input');
+    inp.type = 'number';
+    inp.className = 'inline-dim-input';
+    inp.min = 1;
+    inp.value = item[dim];
+    inp.dataset.dim = dim;
+    return inp;
+  });
+
+  let committed = false;
+  function commit() {
+    if (committed) return;
+    committed = true;
+    let changed = false;
+    fields.forEach(inp => {
+      const dim = inp.dataset.dim;
+      const val = parseInt(inp.value);
+      if (val && val > 0 && val !== item[dim]) {
+        item[dim] = val;
+        changed = true;
+      }
+    });
+    if (changed) {
+      renderAll();
+    } else {
+      span.style.display = '';
+      wrapper.remove();
+    }
+  }
+
+  fields.forEach((inp, i) => {
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      if (e.key === 'Escape') { committed = true; span.style.display = ''; wrapper.remove(); }
+      if (e.key === 'Tab' && !e.shiftKey && i < fields.length - 1) {
+        e.preventDefault();
+        fields[i + 1].focus();
+        fields[i + 1].select();
+      }
+    });
+    inp.addEventListener('blur', () => {
+      setTimeout(() => {
+        if (!wrapper.contains(document.activeElement)) commit();
+      }, 50);
+    });
+    wrapper.appendChild(inp);
+    if (i < 2) {
+      const sep = document.createElement('span');
+      sep.className = 'inline-dim-sep';
+      sep.textContent = '×';
+      wrapper.appendChild(sep);
+    }
+  });
+
+  span.style.display = 'none';
+  span.parentNode.insertBefore(wrapper, span);
+  fields[0].focus();
+  fields[0].select();
+}
+
+// ============================================================
+// STATS
+// ============================================================
 function updateStats() {
   const cont = CONTAINERS[containerSize];
   const totalVol = cont.lengthIn * cont.widthIn * cont.heightIn / 1728;
@@ -323,7 +407,6 @@ function unhighlightItem() {
 function applyHighlights() {
   const activeId = highlightedItemId || hoveredMeshItemId;
 
-  // Highlight 3D meshes
   packedMeshes.forEach(pm => {
     if (!pm.mesh || !pm.mesh.material) return;
     if (activeId && pm.itemId === activeId) {
@@ -353,7 +436,6 @@ function applyHighlights() {
     }
   });
 
-  // Highlight list rows
   document.querySelectorAll('.item-row').forEach(row => {
     const rid = parseInt(row.dataset.itemId);
     if (activeId && rid === activeId) {
@@ -393,6 +475,180 @@ function esc(s) {
 }
 
 // ============================================================
+// BIN PACKING — Maximal Rectangles with Best Area Fit
+// ============================================================
+// Maintains a list of overlapping "maximal free spaces" (3D boxes).
+// For each item (sorted largest-first), find the best-fit space,
+// then split all overlapping spaces and prune subsets.
+// This avoids the fragmentation problems of guillotine cutting.
+// ============================================================
+
+function binPack(cont) {
+  const CL = cont.lengthIn;   // x-axis (length)
+  const CW = cont.widthIn;    // z-axis (depth/width)
+  const CH = cont.heightIn;   // y-axis (height)
+
+  // Flatten all items with metadata
+  const allItems = [];
+  rooms.forEach((room, ri) => {
+    const color = ROOM_COLORS[ri % ROOM_COLORS.length];
+    room.items.forEach(item => {
+      for (let q = 0; q < item.qty; q++) {
+        allItems.push({
+          name: item.name,
+          itemId: item.id,
+          roomId: room.id,
+          origL: item.l,
+          origW: item.w,
+          origH: item.h,
+          color: color,
+          volume: item.l * item.w * item.h,
+        });
+      }
+    });
+  });
+
+  // Sort by volume descending, then by largest single dimension
+  allItems.sort((a, b) => {
+    if (b.volume !== a.volume) return b.volume - a.volume;
+    const aMax = Math.max(a.origL, a.origW, a.origH);
+    const bMax = Math.max(b.origL, b.origW, b.origH);
+    return bMax - aMax;
+  });
+
+  // Free spaces: each is {x, y, z, l, w, h}
+  // l = extent along x (container length), w = extent along z (depth), h = extent along y (height)
+  let freeSpaces = [{ x: 0, y: 0, z: 0, l: CL, w: CW, h: CH }];
+
+  const placed = [];
+
+  for (const item of allItems) {
+    const orientations = getUniqueOrientations(item.origL, item.origW, item.origH);
+
+    let bestFit = null;
+    let bestScore = Infinity;
+
+    for (const ori of orientations) {
+      for (let si = 0; si < freeSpaces.length; si++) {
+        const sp = freeSpaces[si];
+        if (ori.l <= sp.l && ori.w <= sp.w && ori.h <= sp.h) {
+          // Score: strongly prefer bottom (low y), then tighter fit, then back corner
+          const leftover = (sp.l - ori.l) * (sp.w - ori.w);
+          const score = sp.y * 1000000 + leftover * 10 + sp.x * 0.1 + sp.z * 0.01;
+          if (score < bestScore) {
+            bestScore = score;
+            bestFit = { space: sp, ori };
+          }
+        }
+      }
+    }
+
+    if (!bestFit) continue; // overflow
+
+    const { space, ori } = bestFit;
+    const px = space.x;
+    const py = space.y;
+    const pz = space.z;
+
+    placed.push({
+      x: px, y: py, z: pz,
+      l: ori.l, w: ori.w, h: ori.h,
+      color: item.color,
+      name: item.name,
+      itemId: item.itemId,
+      roomId: item.roomId,
+    });
+
+    // Split all free spaces that intersect the placed box
+    const box = { x: px, y: py, z: pz, l: ori.l, w: ori.w, h: ori.h };
+    freeSpaces = splitFreeSpaces(freeSpaces, box);
+    freeSpaces = removeSubsets(freeSpaces);
+  }
+
+  return placed;
+}
+
+// Split free spaces that overlap with the placed box into non-overlapping sub-spaces
+function splitFreeSpaces(spaces, box) {
+  const bx2 = box.x + box.l;
+  const by2 = box.y + box.h;
+  const bz2 = box.z + box.w;
+  const result = [];
+
+  for (const sp of spaces) {
+    const sx2 = sp.x + sp.l;
+    const sy2 = sp.y + sp.h;
+    const sz2 = sp.z + sp.w;
+
+    // No overlap — keep as-is
+    if (box.x >= sx2 || bx2 <= sp.x ||
+        box.y >= sy2 || by2 <= sp.y ||
+        box.z >= sz2 || bz2 <= sp.z) {
+      result.push(sp);
+      continue;
+    }
+
+    // Overlap — split into up to 6 maximal sub-spaces
+    if (sp.x < box.x)
+      result.push({ x: sp.x, y: sp.y, z: sp.z, l: box.x - sp.x, w: sp.w, h: sp.h });
+    if (sx2 > bx2)
+      result.push({ x: bx2, y: sp.y, z: sp.z, l: sx2 - bx2, w: sp.w, h: sp.h });
+    if (sp.z < box.z)
+      result.push({ x: sp.x, y: sp.y, z: sp.z, l: sp.l, w: box.z - sp.z, h: sp.h });
+    if (sz2 > bz2)
+      result.push({ x: sp.x, y: sp.y, z: bz2, l: sp.l, w: sz2 - bz2, h: sp.h });
+    if (sp.y < box.y)
+      result.push({ x: sp.x, y: sp.y, z: sp.z, l: sp.l, w: sp.w, h: box.y - sp.y });
+    if (sy2 > by2)
+      result.push({ x: sp.x, y: by2, z: sp.z, l: sp.l, w: sp.w, h: sy2 - by2 });
+  }
+
+  return result;
+}
+
+// Remove free spaces fully contained within another
+function removeSubsets(spaces) {
+  const filtered = spaces.filter(s => s.l >= 1 && s.w >= 1 && s.h >= 1);
+  const keep = new Array(filtered.length).fill(true);
+
+  for (let i = 0; i < filtered.length; i++) {
+    if (!keep[i]) continue;
+    for (let j = 0; j < filtered.length; j++) {
+      if (i === j || !keep[j]) continue;
+      if (filtered[j].x >= filtered[i].x &&
+          filtered[j].y >= filtered[i].y &&
+          filtered[j].z >= filtered[i].z &&
+          filtered[j].x + filtered[j].l <= filtered[i].x + filtered[i].l &&
+          filtered[j].y + filtered[j].h <= filtered[i].y + filtered[i].h &&
+          filtered[j].z + filtered[j].w <= filtered[i].z + filtered[i].w) {
+        keep[j] = false;
+      }
+    }
+  }
+
+  return filtered.filter((_, i) => keep[i]);
+}
+
+// Get all unique orientations (rotations) for an item
+function getUniqueOrientations(l, w, h) {
+  const perms = [
+    { l, w, h },
+    { l, w: h, h: w },
+    { l: w, w: l, h },
+    { l: w, w: h, h: l },
+    { l: h, w: l, h: w },
+    { l: h, w, h: l },
+  ];
+  const seen = new Set();
+  return perms.filter(p => {
+    const key = `${p.l},${p.w},${p.h}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+// ============================================================
 // THREE.JS — 3D Visualization
 // ============================================================
 const SCALE = 0.01;
@@ -413,7 +669,6 @@ function initThree() {
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
 
-  // Lights
   const ambient = new THREE.AmbientLight(0xffffff, 0.6);
   scene.add(ambient);
   const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
@@ -425,7 +680,6 @@ function initThree() {
   scene.add(containerGroup);
   scene.add(itemsGroup);
 
-  // Raycaster for hover
   raycaster = new THREE.Raycaster();
   mouse = new THREE.Vector2();
 
@@ -505,12 +759,10 @@ function render3D() {
   const cW = cont.widthIn * SCALE;
   const cH = cont.heightIn * SCALE;
 
-  // === CONTAINER FRAME — Strong, visible ===
-  // Draw thick container edges using cylinders for each edge
+  // Container frame
   const edgeColor = 0x7eb8da;
   const edgeRadius = 0.008;
 
-  // Helper to draw a thick edge between two points
   function drawEdge(x1, y1, z1, x2, y2, z2) {
     const dir = new THREE.Vector3(x2 - x1, y2 - y1, z2 - z1);
     const len = dir.length();
@@ -520,30 +772,20 @@ function render3D() {
     const mid = new THREE.Vector3((x1+x2)/2, (y1+y2)/2, (z1+z2)/2);
     mesh.position.copy(mid);
     dir.normalize();
-    const up = new THREE.Vector3(0, 1, 0);
-    const quat = new THREE.Quaternion().setFromUnitVectors(up, dir);
+    const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0), dir);
     mesh.setRotationFromQuaternion(quat);
     containerGroup.add(mesh);
   }
 
-  // Bottom edges
   const hw = cW / 2;
-  drawEdge(0, 0, -hw,  cL, 0, -hw);
-  drawEdge(0, 0, hw,   cL, 0, hw);
-  drawEdge(0, 0, -hw,  0,  0, hw);
-  drawEdge(cL, 0, -hw, cL, 0, hw);
-  // Top edges
-  drawEdge(0, cH, -hw,  cL, cH, -hw);
-  drawEdge(0, cH, hw,   cL, cH, hw);
-  drawEdge(0, cH, -hw,  0,  cH, hw);
-  drawEdge(cL, cH, -hw, cL, cH, hw);
-  // Vertical edges
-  drawEdge(0, 0, -hw,   0, cH, -hw);
-  drawEdge(cL, 0, -hw,  cL, cH, -hw);
-  drawEdge(0, 0, hw,    0, cH, hw);
-  drawEdge(cL, 0, hw,   cL, cH, hw);
+  drawEdge(0,0,-hw, cL,0,-hw); drawEdge(0,0,hw, cL,0,hw);
+  drawEdge(0,0,-hw, 0,0,hw);   drawEdge(cL,0,-hw, cL,0,hw);
+  drawEdge(0,cH,-hw, cL,cH,-hw); drawEdge(0,cH,hw, cL,cH,hw);
+  drawEdge(0,cH,-hw, 0,cH,hw);   drawEdge(cL,cH,-hw, cL,cH,hw);
+  drawEdge(0,0,-hw, 0,cH,-hw);   drawEdge(cL,0,-hw, cL,cH,-hw);
+  drawEdge(0,0,hw, 0,cH,hw);     drawEdge(cL,0,hw, cL,cH,hw);
 
-  // Corner posts — small spheres
+  // Corner spheres
   const cornerGeo = new THREE.SphereGeometry(edgeRadius * 1.5, 8, 8);
   const cornerMat = new THREE.MeshBasicMaterial({ color: edgeColor });
   [[0,0,-hw],[cL,0,-hw],[0,0,hw],[cL,0,hw],
@@ -553,23 +795,19 @@ function render3D() {
     containerGroup.add(s);
   });
 
-  // Floor grid inside container
-  const gridStep = 12 * SCALE; // 12 inch grid
+  // Floor grid
+  const gridStep = 12 * SCALE;
   const gridMat = new THREE.LineBasicMaterial({ color: 0x2a3a5a, transparent: true, opacity: 0.4 });
-  // Lines along length
   for (let z = -hw; z <= hw + 0.001; z += gridStep) {
-    const points = [new THREE.Vector3(0, 0.001, z), new THREE.Vector3(cL, 0.001, z)];
-    const geo = new THREE.BufferGeometry().setFromPoints(points);
-    containerGroup.add(new THREE.Line(geo, gridMat));
+    const pts = [new THREE.Vector3(0, 0.001, z), new THREE.Vector3(cL, 0.001, z)];
+    containerGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), gridMat));
   }
-  // Lines along width
   for (let x = 0; x <= cL + 0.001; x += gridStep) {
-    const points = [new THREE.Vector3(x, 0.001, -hw), new THREE.Vector3(x, 0.001, hw)];
-    const geo = new THREE.BufferGeometry().setFromPoints(points);
-    containerGroup.add(new THREE.Line(geo, gridMat));
+    const pts = [new THREE.Vector3(x, 0.001, -hw), new THREE.Vector3(x, 0.001, hw)];
+    containerGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), gridMat));
   }
 
-  // Semi-transparent floor
+  // Floor plane
   const floorGeo = new THREE.PlaneGeometry(cL, cW);
   const floorMat = new THREE.MeshBasicMaterial({ color: 0x1a2040, transparent: true, opacity: 0.6, side: THREE.DoubleSide });
   const floor = new THREE.Mesh(floorGeo, floorMat);
@@ -577,7 +815,7 @@ function render3D() {
   floor.position.set(cL / 2, 0.0005, 0);
   containerGroup.add(floor);
 
-  // Semi-transparent back wall
+  // Back wall
   const backGeo = new THREE.PlaneGeometry(cW, cH);
   const backMat = new THREE.MeshBasicMaterial({ color: 0x1a1a3e, transparent: true, opacity: 0.2, side: THREE.DoubleSide });
   const backWall = new THREE.Mesh(backGeo, backMat);
@@ -585,7 +823,7 @@ function render3D() {
   backWall.position.set(0, cH / 2, 0);
   containerGroup.add(backWall);
 
-  // Pack items
+  // Pack and render items
   const packed = binPack(cont);
   packed.forEach(p => {
     const il = p.l * SCALE;
@@ -595,26 +833,19 @@ function render3D() {
     const geo = new THREE.BoxGeometry(il, ih, iw);
 
     if (wireframeMode) {
-      const edgeGeo = new THREE.EdgesGeometry(geo);
-      const edgeMat = new THREE.LineBasicMaterial({ color: color });
-      const mesh = new THREE.LineSegments(edgeGeo, edgeMat);
-      mesh.position.set(p.x * SCALE + il / 2, p.y * SCALE + ih / 2, p.z * SCALE + iw / 2 - cW / 2);
+      const edgeMat = new THREE.LineBasicMaterial({ color });
+      const mesh = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat);
+      mesh.position.set(p.x * SCALE + il/2, p.y * SCALE + ih/2, p.z * SCALE + iw/2 - cW/2);
       itemsGroup.add(mesh);
       packedMeshes.push({ mesh, edgeMesh: null, itemId: p.itemId, roomId: p.roomId, color: p.color });
     } else {
-      const mat = new THREE.MeshPhongMaterial({
-        color: color,
-        transparent: true,
-        opacity: 0.85,
-        shininess: 30,
-      });
+      const mat = new THREE.MeshPhongMaterial({ color, transparent: true, opacity: 0.85, shininess: 30 });
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(p.x * SCALE + il / 2, p.y * SCALE + ih / 2, p.z * SCALE + iw / 2 - cW / 2);
+      mesh.position.set(p.x * SCALE + il/2, p.y * SCALE + ih/2, p.z * SCALE + iw/2 - cW/2);
       itemsGroup.add(mesh);
 
-      const edgeGeo = new THREE.EdgesGeometry(geo);
-      const edgeMat = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3 });
-      const edgeMesh = new THREE.LineSegments(edgeGeo, edgeMat);
+      const edgeMat2 = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3 });
+      const edgeMesh = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat2);
       edgeMesh.position.copy(mesh.position);
       itemsGroup.add(edgeMesh);
 
@@ -622,175 +853,20 @@ function render3D() {
     }
   });
 
-  // Show overflow warning
+  // Overflow warning
+  const totalItems = totalItemCount();
   const overflowEl = document.getElementById('overflow-warning');
-  if (packed.length < totalItemCount()) {
-    const missed = totalItemCount() - packed.length;
-    if (overflowEl) {
-      overflowEl.textContent = `⚠️ ${missed} item${missed > 1 ? 's' : ''} couldn't fit in the container!`;
-      overflowEl.style.display = 'block';
-    }
+  if (packed.length < totalItems) {
+    const missed = totalItems - packed.length;
+    const packedVol = packed.reduce((s, p) => s + (p.l * p.w * p.h / 1728), 0);
+    const overflowVol = totalUsedCuFt() - packedVol;
+    overflowEl.innerHTML = `⚠️ OVERFLOW — ${missed} item${missed > 1 ? 's' : ''} couldn't fit! (~${overflowVol.toFixed(0)} cu ft excess)`;
+    overflowEl.style.display = 'block';
   } else {
-    if (overflowEl) overflowEl.style.display = 'none';
+    overflowEl.style.display = 'none';
   }
 
   resetCamera();
-}
-
-// ============================================================
-// BIN PACKING — Improved guillotine-style 3D packing
-// ============================================================
-function binPack(cont) {
-  const cL = cont.lengthIn;
-  const cW = cont.widthIn;
-  const cH = cont.heightIn;
-
-  // Flatten all items (expand qty) with metadata
-  const allItems = [];
-  rooms.forEach((room, ri) => {
-    const color = ROOM_COLORS[ri % ROOM_COLORS.length];
-    room.items.forEach(item => {
-      for (let q = 0; q < item.qty; q++) {
-        // Try orientations: we want to pack with largest face on the bottom
-        // Sort dims to get consistent orientations
-        const dims = [item.l, item.w, item.h].sort((a, b) => b - a);
-        allItems.push({
-          name: item.name,
-          itemId: item.id,
-          roomId: room.id,
-          // Orient: longest along container length, second longest along width, shortest as height
-          // But for tall things (like wardrobe boxes), keep height tall
-          l: dims[0],
-          w: dims[1],
-          h: dims[2],
-          color: color,
-          volume: dims[0] * dims[1] * dims[2],
-          maxDim: dims[0],
-        });
-      }
-    });
-  });
-
-  // Sort by volume descending, then by max dimension descending
-  allItems.sort((a, b) => {
-    if (b.volume !== a.volume) return b.volume - a.volume;
-    return b.maxDim - a.maxDim;
-  });
-
-  // Free space rectangles (guillotine approach)
-  // Each space: { x, y, z, l (along length), w (along width), h (along height) }
-  let freeSpaces = [{ x: 0, y: 0, z: 0, l: cL, w: cW, h: cH }];
-
-  const placed = [];
-
-  for (const item of allItems) {
-    // Try all 6 orientations
-    const orientations = getOrientations(item.l, item.w, item.h);
-    let bestSpace = null;
-    let bestOri = null;
-    let bestScore = Infinity;
-
-    for (const ori of orientations) {
-      for (const space of freeSpaces) {
-        if (ori.l <= space.l && ori.w <= space.w && ori.h <= space.h) {
-          // Score: prefer lower y (bottom), then smaller x (back), then smaller z
-          const score = space.y * 10000 + space.x * 100 + space.z;
-          if (score < bestScore) {
-            bestScore = score;
-            bestSpace = space;
-            bestOri = ori;
-          }
-        }
-      }
-    }
-
-    if (bestSpace && bestOri) {
-      placed.push({
-        x: bestSpace.x,
-        y: bestSpace.y,
-        z: bestSpace.z,
-        l: bestOri.l,
-        w: bestOri.w,
-        h: bestOri.h,
-        color: item.color,
-        name: item.name,
-        itemId: item.itemId,
-        roomId: item.roomId,
-      });
-
-      // Remove this free space and split into up to 3 new spaces
-      freeSpaces = freeSpaces.filter(s => s !== bestSpace);
-
-      // Space to the right (along length)
-      const rightL = bestSpace.l - bestOri.l;
-      if (rightL > 0) {
-        freeSpaces.push({
-          x: bestSpace.x + bestOri.l,
-          y: bestSpace.y,
-          z: bestSpace.z,
-          l: rightL,
-          w: bestSpace.w,
-          h: bestSpace.h,
-        });
-      }
-
-      // Space in front (along width)
-      const frontW = bestSpace.w - bestOri.w;
-      if (frontW > 0) {
-        freeSpaces.push({
-          x: bestSpace.x,
-          y: bestSpace.y,
-          z: bestSpace.z + bestOri.w,
-          l: bestOri.l,
-          w: frontW,
-          h: bestSpace.h,
-        });
-      }
-
-      // Space above (along height)
-      const aboveH = bestSpace.h - bestOri.h;
-      if (aboveH > 0) {
-        freeSpaces.push({
-          x: bestSpace.x,
-          y: bestSpace.y + bestOri.h,
-          z: bestSpace.z,
-          l: bestOri.l,
-          w: bestOri.w,
-          h: aboveH,
-        });
-      }
-
-      // Sort free spaces: prefer bottom first, then back, then left
-      freeSpaces.sort((a, b) => {
-        if (a.y !== b.y) return a.y - b.y;
-        if (a.x !== b.x) return a.x - b.x;
-        return a.z - b.z;
-      });
-    }
-    // If no space found, item is skipped (overflow)
-  }
-
-  return placed;
-}
-
-function getOrientations(l, w, h) {
-  // Return all 6 unique orientations (l along length, w along width, h as height)
-  const perms = [
-    { l, w, h },
-    { l, w: h, h: w },
-    { l: w, w: l, h },
-    { l: w, w: h, h: l },
-    { l: h, w: l, h: w },
-    { l: h, w, h: l },
-  ];
-  // Deduplicate
-  const seen = new Set();
-  return perms.filter(p => {
-    const key = `${p.l},${p.w},${p.h}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
 
 // ============================================================
@@ -855,7 +931,7 @@ function shareLayout() {
   history.replaceState(null, '', '#' + compressed);
 
   navigator.clipboard.writeText(url).then(() => {
-    showToast('🔗 Link copied! Share this URL with your shipping company');
+    showToast('🔗 Link copied! Share this URL to show your container layout');
   }).catch(() => {
     const ta = document.createElement('textarea');
     ta.value = url;
@@ -863,7 +939,7 @@ function shareLayout() {
     ta.select();
     document.execCommand('copy');
     document.body.removeChild(ta);
-    showToast('🔗 Link copied! Share this URL with your shipping company');
+    showToast('🔗 Link copied! Share this URL to show your container layout');
   });
 }
 
