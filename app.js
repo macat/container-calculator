@@ -95,6 +95,12 @@ function init() {
   initThree();
   renderAll();
   window.addEventListener('resize', onResize);
+  // Safari mobile: fire resize after orientation change + delayed for URL bar transitions
+  window.addEventListener('orientationchange', () => {
+    setTimeout(onResize, 200);
+  });
+  // Also resize after fonts/layout settle
+  setTimeout(onResize, 100);
 }
 
 // ============================================================
@@ -724,6 +730,7 @@ function animate() {
 
 function onResize() {
   const el = document.getElementById('three-container');
+  if (!el || el.clientWidth === 0 || el.clientHeight === 0) return;
   camera.aspect = el.clientWidth / el.clientHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(el.clientWidth, el.clientHeight);
