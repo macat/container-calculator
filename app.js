@@ -1,5 +1,5 @@
 // ============================================================
-// Container Calculator — app.js
+// Container Calculator — app.js (v2 — with fixes)
 // ============================================================
 
 // --- Constants ---
@@ -29,6 +29,12 @@ let nextRoomId = 1;
 let nextItemId = 1;
 let addItemTargetRoomId = null;
 let wireframeMode = false;
+
+// --- Hover / highlight state ---
+let highlightedItemId = null;   // item id currently hovered in list
+let hoveredMeshItemId = null;   // item id currently hovered in 3D
+let packedMeshes = [];          // array of { mesh, edgeMesh, itemId, roomId, color }
+let raycaster, mouse;
 
 // --- Three.js globals ---
 let scene, camera, renderer, controls;
@@ -119,7 +125,6 @@ function getDefaultRooms() {
 // INIT
 // ============================================================
 function init() {
-  // Check for shared state in URL hash first
   if (!loadFromHash()) {
     rooms = getDefaultRooms();
   }
@@ -170,9 +175,15 @@ function renderRooms() {
 function itemRowHTML(it, roomId) {
   const vol = ((it.l * it.w * it.h * it.qty) / 1728).toFixed(1);
   return `
-    <div class="item-row">
+    <div class="item-row" data-item-id="${it.id}"
+         onmouseenter="highlightItem(${it.id})"
+         onmouseleave="unhighlightItem()">
       <span class="item-name">${esc(it.name)}</span>
-      ${it.qty > 1 ? `<span class="item-qty">×${it.qty}</span>` : ''}
+      <div class="qty-controls">
+        <button class="qty-btn" onclick="event.stopPropagation(); changeQty(${roomId}, ${it.id}, -1)" title="Decrease">−</button>
+        <span class="item-qty-value">${it.qty}</span>
+        <button class="qty-btn" onclick="event.stopPropagation(); changeQty(${roomId}, ${it.id}, 1)" title="Increase">+</button>
+      </div>
       <span class="item-dims">${it.l}×${it.w}×${it.h}"</span>
       <span class="item-vol">${vol} ft³</span>
       <button class="btn-remove-item" onclick="removeItem(${roomId}, ${it.id})" title="Remove">✕</button>
@@ -260,6 +271,18 @@ function removeItem(roomId, itemId) {
   }
 }
 
+function changeQty(roomId, itemId, delta) {
+  const room = rooms.find(r => r.id === roomId);
+  if (!room) return;
+  const item = room.items.find(it => it.id === itemId);
+  if (!item) return;
+  item.qty = Math.max(0, item.qty + delta);
+  if (item.qty === 0) {
+    room.items = room.items.filter(it => it.id !== itemId);
+  }
+  renderAll();
+}
+
 function applyPreset(key) {
   const p = PRESETS[key];
   if (!p) return;
@@ -273,7 +296,6 @@ function closeModal(id) {
   document.getElementById(id).style.display = 'none';
 }
 
-// Handle Enter key in modals
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     if (document.getElementById('modal-add-room').style.display === 'flex') confirmAddRoom();
@@ -284,6 +306,63 @@ document.addEventListener('keydown', (e) => {
     closeModal('modal-add-item');
   }
 });
+
+// ============================================================
+// HOVER / HIGHLIGHT
+// ============================================================
+function highlightItem(itemId) {
+  highlightedItemId = itemId;
+  applyHighlights();
+}
+
+function unhighlightItem() {
+  highlightedItemId = null;
+  applyHighlights();
+}
+
+function applyHighlights() {
+  const activeId = highlightedItemId || hoveredMeshItemId;
+
+  // Highlight 3D meshes
+  packedMeshes.forEach(pm => {
+    if (!pm.mesh || !pm.mesh.material) return;
+    if (activeId && pm.itemId === activeId) {
+      pm.mesh.material.emissive = new THREE.Color(0xffffff);
+      pm.mesh.material.emissiveIntensity = 0.35;
+      pm.mesh.material.opacity = 1.0;
+      if (pm.edgeMesh && pm.edgeMesh.material) {
+        pm.edgeMesh.material.color = new THREE.Color(0xffffff);
+        pm.edgeMesh.material.opacity = 1.0;
+      }
+    } else if (activeId && pm.itemId !== activeId) {
+      pm.mesh.material.emissive = new THREE.Color(0x000000);
+      pm.mesh.material.emissiveIntensity = 0;
+      pm.mesh.material.opacity = 0.25;
+      if (pm.edgeMesh && pm.edgeMesh.material) {
+        pm.edgeMesh.material.color = new THREE.Color(0x000000);
+        pm.edgeMesh.material.opacity = 0.1;
+      }
+    } else {
+      pm.mesh.material.emissive = new THREE.Color(0x000000);
+      pm.mesh.material.emissiveIntensity = 0;
+      pm.mesh.material.opacity = 0.85;
+      if (pm.edgeMesh && pm.edgeMesh.material) {
+        pm.edgeMesh.material.color = new THREE.Color(0x000000);
+        pm.edgeMesh.material.opacity = 0.3;
+      }
+    }
+  });
+
+  // Highlight list rows
+  document.querySelectorAll('.item-row').forEach(row => {
+    const rid = parseInt(row.dataset.itemId);
+    if (activeId && rid === activeId) {
+      row.classList.add('highlighted');
+    } else {
+      row.classList.remove('highlighted');
+    }
+  });
+}
 
 // ============================================================
 // CALCULATIONS
@@ -316,7 +395,7 @@ function esc(s) {
 // ============================================================
 // THREE.JS — 3D Visualization
 // ============================================================
-const SCALE = 0.01; // inches to Three.js units
+const SCALE = 0.01;
 
 function initThree() {
   const el = document.getElementById('three-container');
@@ -333,7 +412,6 @@ function initThree() {
   controls = new THREE.OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
-  controls.addEventListener('change', () => renderer.render(scene, camera));
 
   // Lights
   const ambient = new THREE.AmbientLight(0xffffff, 0.6);
@@ -342,18 +420,46 @@ function initThree() {
   dirLight.position.set(5, 8, 5);
   scene.add(dirLight);
 
-  // Ground grid
-  const grid = new THREE.GridHelper(10, 20, 0x2a2a4a, 0x1a1a3e);
-  grid.position.y = -0.01;
-  scene.add(grid);
-
   containerGroup = new THREE.Group();
   itemsGroup = new THREE.Group();
   scene.add(containerGroup);
   scene.add(itemsGroup);
 
+  // Raycaster for hover
+  raycaster = new THREE.Raycaster();
+  mouse = new THREE.Vector2();
+
+  renderer.domElement.addEventListener('mousemove', onMouseMove3D);
+  renderer.domElement.addEventListener('mouseleave', () => {
+    hoveredMeshItemId = null;
+    applyHighlights();
+  });
+
   resetCamera();
   animate();
+}
+
+function onMouseMove3D(event) {
+  const el = renderer.domElement;
+  const rect = el.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+  const meshes = packedMeshes.filter(pm => pm.mesh).map(pm => pm.mesh);
+  const intersects = raycaster.intersectObjects(meshes);
+
+  if (intersects.length > 0) {
+    const hitMesh = intersects[0].object;
+    const pm = packedMeshes.find(p => p.mesh === hitMesh);
+    if (pm && pm.itemId !== hoveredMeshItemId) {
+      hoveredMeshItemId = pm.itemId;
+      applyHighlights();
+    }
+  } else if (hoveredMeshItemId !== null) {
+    hoveredMeshItemId = null;
+    applyHighlights();
+  }
 }
 
 function animate() {
@@ -390,34 +496,90 @@ function toggleWireframe() {
 // 3D RENDERING
 // ============================================================
 function render3D() {
-  // Clear old
   while (containerGroup.children.length) containerGroup.remove(containerGroup.children[0]);
   while (itemsGroup.children.length) itemsGroup.remove(itemsGroup.children[0]);
+  packedMeshes = [];
 
   const cont = CONTAINERS[containerSize];
   const cL = cont.lengthIn * SCALE;
   const cW = cont.widthIn * SCALE;
   const cH = cont.heightIn * SCALE;
 
-  // Draw container wireframe
-  const boxGeo = new THREE.BoxGeometry(cL, cH, cW);
-  const edges = new THREE.EdgesGeometry(boxGeo);
-  const lineMat = new THREE.LineBasicMaterial({ color: 0x4a4a7a, linewidth: 2 });
-  const wireframe = new THREE.LineSegments(edges, lineMat);
-  wireframe.position.set(cL / 2, cH / 2, 0);
-  containerGroup.add(wireframe);
+  // === CONTAINER FRAME — Strong, visible ===
+  // Draw thick container edges using cylinders for each edge
+  const edgeColor = 0x7eb8da;
+  const edgeRadius = 0.008;
+
+  // Helper to draw a thick edge between two points
+  function drawEdge(x1, y1, z1, x2, y2, z2) {
+    const dir = new THREE.Vector3(x2 - x1, y2 - y1, z2 - z1);
+    const len = dir.length();
+    const geo = new THREE.CylinderGeometry(edgeRadius, edgeRadius, len, 6);
+    const mat = new THREE.MeshBasicMaterial({ color: edgeColor });
+    const mesh = new THREE.Mesh(geo, mat);
+    const mid = new THREE.Vector3((x1+x2)/2, (y1+y2)/2, (z1+z2)/2);
+    mesh.position.copy(mid);
+    dir.normalize();
+    const up = new THREE.Vector3(0, 1, 0);
+    const quat = new THREE.Quaternion().setFromUnitVectors(up, dir);
+    mesh.setRotationFromQuaternion(quat);
+    containerGroup.add(mesh);
+  }
+
+  // Bottom edges
+  const hw = cW / 2;
+  drawEdge(0, 0, -hw,  cL, 0, -hw);
+  drawEdge(0, 0, hw,   cL, 0, hw);
+  drawEdge(0, 0, -hw,  0,  0, hw);
+  drawEdge(cL, 0, -hw, cL, 0, hw);
+  // Top edges
+  drawEdge(0, cH, -hw,  cL, cH, -hw);
+  drawEdge(0, cH, hw,   cL, cH, hw);
+  drawEdge(0, cH, -hw,  0,  cH, hw);
+  drawEdge(cL, cH, -hw, cL, cH, hw);
+  // Vertical edges
+  drawEdge(0, 0, -hw,   0, cH, -hw);
+  drawEdge(cL, 0, -hw,  cL, cH, -hw);
+  drawEdge(0, 0, hw,    0, cH, hw);
+  drawEdge(cL, 0, hw,   cL, cH, hw);
+
+  // Corner posts — small spheres
+  const cornerGeo = new THREE.SphereGeometry(edgeRadius * 1.5, 8, 8);
+  const cornerMat = new THREE.MeshBasicMaterial({ color: edgeColor });
+  [[0,0,-hw],[cL,0,-hw],[0,0,hw],[cL,0,hw],
+   [0,cH,-hw],[cL,cH,-hw],[0,cH,hw],[cL,cH,hw]].forEach(p => {
+    const s = new THREE.Mesh(cornerGeo, cornerMat);
+    s.position.set(p[0], p[1], p[2]);
+    containerGroup.add(s);
+  });
+
+  // Floor grid inside container
+  const gridStep = 12 * SCALE; // 12 inch grid
+  const gridMat = new THREE.LineBasicMaterial({ color: 0x2a3a5a, transparent: true, opacity: 0.4 });
+  // Lines along length
+  for (let z = -hw; z <= hw + 0.001; z += gridStep) {
+    const points = [new THREE.Vector3(0, 0.001, z), new THREE.Vector3(cL, 0.001, z)];
+    const geo = new THREE.BufferGeometry().setFromPoints(points);
+    containerGroup.add(new THREE.Line(geo, gridMat));
+  }
+  // Lines along width
+  for (let x = 0; x <= cL + 0.001; x += gridStep) {
+    const points = [new THREE.Vector3(x, 0.001, -hw), new THREE.Vector3(x, 0.001, hw)];
+    const geo = new THREE.BufferGeometry().setFromPoints(points);
+    containerGroup.add(new THREE.Line(geo, gridMat));
+  }
 
   // Semi-transparent floor
   const floorGeo = new THREE.PlaneGeometry(cL, cW);
-  const floorMat = new THREE.MeshBasicMaterial({ color: 0x1a1a3e, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+  const floorMat = new THREE.MeshBasicMaterial({ color: 0x1a2040, transparent: true, opacity: 0.6, side: THREE.DoubleSide });
   const floor = new THREE.Mesh(floorGeo, floorMat);
   floor.rotation.x = -Math.PI / 2;
-  floor.position.set(cL / 2, 0.001, 0);
+  floor.position.set(cL / 2, 0.0005, 0);
   containerGroup.add(floor);
 
   // Semi-transparent back wall
   const backGeo = new THREE.PlaneGeometry(cW, cH);
-  const backMat = new THREE.MeshBasicMaterial({ color: 0x1a1a3e, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
+  const backMat = new THREE.MeshBasicMaterial({ color: 0x1a1a3e, transparent: true, opacity: 0.2, side: THREE.DoubleSide });
   const backWall = new THREE.Mesh(backGeo, backMat);
   backWall.rotation.y = Math.PI / 2;
   backWall.position.set(0, cH / 2, 0);
@@ -429,7 +591,6 @@ function render3D() {
     const il = p.l * SCALE;
     const iw = p.w * SCALE;
     const ih = p.h * SCALE;
-
     const color = new THREE.Color(p.color);
     const geo = new THREE.BoxGeometry(il, ih, iw);
 
@@ -437,8 +598,9 @@ function render3D() {
       const edgeGeo = new THREE.EdgesGeometry(geo);
       const edgeMat = new THREE.LineBasicMaterial({ color: color });
       const mesh = new THREE.LineSegments(edgeGeo, edgeMat);
-      mesh.position.set(p.x * SCALE + il / 2, p.y * SCALE + ih / 2, p.z * SCALE);
+      mesh.position.set(p.x * SCALE + il / 2, p.y * SCALE + ih / 2, p.z * SCALE + iw / 2 - cW / 2);
       itemsGroup.add(mesh);
+      packedMeshes.push({ mesh, edgeMesh: null, itemId: p.itemId, roomId: p.roomId, color: p.color });
     } else {
       const mat = new THREE.MeshPhongMaterial({
         color: color,
@@ -447,136 +609,192 @@ function render3D() {
         shininess: 30,
       });
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(p.x * SCALE + il / 2, p.y * SCALE + ih / 2, p.z * SCALE);
+      mesh.position.set(p.x * SCALE + il / 2, p.y * SCALE + ih / 2, p.z * SCALE + iw / 2 - cW / 2);
       itemsGroup.add(mesh);
 
-      // Add edges
       const edgeGeo = new THREE.EdgesGeometry(geo);
       const edgeMat = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3 });
       const edgeMesh = new THREE.LineSegments(edgeGeo, edgeMat);
       edgeMesh.position.copy(mesh.position);
       itemsGroup.add(edgeMesh);
+
+      packedMeshes.push({ mesh, edgeMesh, itemId: p.itemId, roomId: p.roomId, color: p.color });
     }
   });
+
+  // Show overflow warning
+  const overflowEl = document.getElementById('overflow-warning');
+  if (packed.length < totalItemCount()) {
+    const missed = totalItemCount() - packed.length;
+    if (overflowEl) {
+      overflowEl.textContent = `⚠️ ${missed} item${missed > 1 ? 's' : ''} couldn't fit in the container!`;
+      overflowEl.style.display = 'block';
+    }
+  } else {
+    if (overflowEl) overflowEl.style.display = 'none';
+  }
 
   resetCamera();
 }
 
 // ============================================================
-// BIN PACKING — Simple shelf-based algorithm
+// BIN PACKING — Improved guillotine-style 3D packing
 // ============================================================
 function binPack(cont) {
   const cL = cont.lengthIn;
   const cW = cont.widthIn;
   const cH = cont.heightIn;
 
-  // Flatten all items (expand qty) and sort by volume descending
+  // Flatten all items (expand qty) with metadata
   const allItems = [];
   rooms.forEach((room, ri) => {
     const color = ROOM_COLORS[ri % ROOM_COLORS.length];
     room.items.forEach(item => {
       for (let q = 0; q < item.qty; q++) {
-        // Orient: longest dim along container length, tallest up
+        // Try orientations: we want to pack with largest face on the bottom
+        // Sort dims to get consistent orientations
         const dims = [item.l, item.w, item.h].sort((a, b) => b - a);
         allItems.push({
           name: item.name,
-          l: dims[0], // longest → along container length
-          w: dims[1], // middle → along container width
-          h: dims[2], // shortest → height (or vice versa if helps)
+          itemId: item.id,
+          roomId: room.id,
+          // Orient: longest along container length, second longest along width, shortest as height
+          // But for tall things (like wardrobe boxes), keep height tall
+          l: dims[0],
+          w: dims[1],
+          h: dims[2],
           color: color,
           volume: dims[0] * dims[1] * dims[2],
+          maxDim: dims[0],
         });
       }
     });
   });
 
-  // Sort largest first
-  allItems.sort((a, b) => b.volume - a.volume);
+  // Sort by volume descending, then by max dimension descending
+  allItems.sort((a, b) => {
+    if (b.volume !== a.volume) return b.volume - a.volume;
+    return b.maxDim - a.maxDim;
+  });
 
-  // Simple 3D shelf packing
+  // Free space rectangles (guillotine approach)
+  // Each space: { x, y, z, l (along length), w (along width), h (along height) }
+  let freeSpaces = [{ x: 0, y: 0, z: 0, l: cL, w: cW, h: cH }];
+
   const placed = [];
-  // Track occupied space with a height map grid
-  // Divide floor into cells of 1 inch resolution (too heavy) — use a simpler approach
-  // We'll use a layer/shelf approach:
-  
-  // Each "shelf" has a y-base, and we pack items left-to-right, front-to-back
-  const shelves = []; // { yBase, maxH, rows: [{ zBase, maxW, items }] }
 
   for (const item of allItems) {
-    let wasPlaced = false;
+    // Try all 6 orientations
+    const orientations = getOrientations(item.l, item.w, item.h);
+    let bestSpace = null;
+    let bestOri = null;
+    let bestScore = Infinity;
 
-    // Try to fit in existing shelves
-    for (const shelf of shelves) {
-      if (shelf.yBase + item.h > cH) continue; // won't fit vertically in this shelf
-
-      // Try existing rows in this shelf
-      for (const row of shelf.rows) {
-        if (row.zBase + item.w > cW / 2 + cW / 2) continue; // check width (centered on z=0)
-        const nextX = row.nextX;
-        if (nextX + item.l <= cL) {
-          // Place here
-          placed.push({
-            x: nextX,
-            y: shelf.yBase,
-            z: row.zBase - cW / 2,
-            l: item.l, w: item.w, h: item.h,
-            color: item.color,
-          });
-          row.nextX = nextX + item.l;
-          shelf.maxH = Math.max(shelf.maxH, item.h);
-          row.maxW = Math.max(row.maxW, item.w);
-          wasPlaced = true;
-          break;
+    for (const ori of orientations) {
+      for (const space of freeSpaces) {
+        if (ori.l <= space.l && ori.w <= space.w && ori.h <= space.h) {
+          // Score: prefer lower y (bottom), then smaller x (back), then smaller z
+          const score = space.y * 10000 + space.x * 100 + space.z;
+          if (score < bestScore) {
+            bestScore = score;
+            bestSpace = space;
+            bestOri = ori;
+          }
         }
       }
-      if (wasPlaced) break;
-
-      // Try new row in this shelf
-      const newZBase = shelf.rows.length === 0 ? 0 : shelf.rows.reduce((m, r) => Math.max(m, r.zBase + r.maxW), 0);
-      if (newZBase + item.w <= cW && item.l <= cL) {
-        const row = { zBase: newZBase, maxW: item.w, nextX: item.l };
-        shelf.rows.push(row);
-        placed.push({
-          x: 0,
-          y: shelf.yBase,
-          z: newZBase - cW / 2,
-          l: item.l, w: item.w, h: item.h,
-          color: item.color,
-        });
-        shelf.maxH = Math.max(shelf.maxH, item.h);
-        wasPlaced = true;
-        break;
-      }
     }
 
-    if (!wasPlaced) {
-      // New shelf
-      const newYBase = shelves.length === 0 ? 0 : shelves.reduce((m, s) => Math.max(m, s.yBase + s.maxH), 0);
-      if (newYBase + item.h <= cH && item.l <= cL && item.w <= cW) {
-        const shelf = { yBase: newYBase, maxH: item.h, rows: [{ zBase: 0, maxW: item.w, nextX: item.l }] };
-        shelves.push(shelf);
-        placed.push({
-          x: 0,
-          y: newYBase,
-          z: 0 - cW / 2,
-          l: item.l, w: item.w, h: item.h,
-          color: item.color,
+    if (bestSpace && bestOri) {
+      placed.push({
+        x: bestSpace.x,
+        y: bestSpace.y,
+        z: bestSpace.z,
+        l: bestOri.l,
+        w: bestOri.w,
+        h: bestOri.h,
+        color: item.color,
+        name: item.name,
+        itemId: item.itemId,
+        roomId: item.roomId,
+      });
+
+      // Remove this free space and split into up to 3 new spaces
+      freeSpaces = freeSpaces.filter(s => s !== bestSpace);
+
+      // Space to the right (along length)
+      const rightL = bestSpace.l - bestOri.l;
+      if (rightL > 0) {
+        freeSpaces.push({
+          x: bestSpace.x + bestOri.l,
+          y: bestSpace.y,
+          z: bestSpace.z,
+          l: rightL,
+          w: bestSpace.w,
+          h: bestSpace.h,
         });
       }
-      // If it doesn't fit at all, skip (overflow)
+
+      // Space in front (along width)
+      const frontW = bestSpace.w - bestOri.w;
+      if (frontW > 0) {
+        freeSpaces.push({
+          x: bestSpace.x,
+          y: bestSpace.y,
+          z: bestSpace.z + bestOri.w,
+          l: bestOri.l,
+          w: frontW,
+          h: bestSpace.h,
+        });
+      }
+
+      // Space above (along height)
+      const aboveH = bestSpace.h - bestOri.h;
+      if (aboveH > 0) {
+        freeSpaces.push({
+          x: bestSpace.x,
+          y: bestSpace.y + bestOri.h,
+          z: bestSpace.z,
+          l: bestOri.l,
+          w: bestOri.w,
+          h: aboveH,
+        });
+      }
+
+      // Sort free spaces: prefer bottom first, then back, then left
+      freeSpaces.sort((a, b) => {
+        if (a.y !== b.y) return a.y - b.y;
+        if (a.x !== b.x) return a.x - b.x;
+        return a.z - b.z;
+      });
     }
+    // If no space found, item is skipped (overflow)
   }
 
   return placed;
 }
 
-// ============================================================
-// INIT ON LOAD
-// ============================================================
-window.addEventListener('DOMContentLoaded', init);
+function getOrientations(l, w, h) {
+  // Return all 6 unique orientations (l along length, w along width, h as height)
+  const perms = [
+    { l, w, h },
+    { l, w: h, h: w },
+    { l: w, w: l, h },
+    { l: w, w: h, h: l },
+    { l: h, w: l, h: w },
+    { l: h, w, h: l },
+  ];
+  // Deduplicate
+  const seen = new Set();
+  return perms.filter(p => {
+    const key = `${p.l},${p.w},${p.h}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 // ============================================================
-// SHARE / SAVE — URL-based state persistence
+// SHARE / SAVE
 // ============================================================
 function getState() {
   return {
@@ -634,15 +852,11 @@ function shareLayout() {
   const json = JSON.stringify(state);
   const compressed = LZString.compressToEncodedURIComponent(json);
   const url = window.location.origin + window.location.pathname + '#' + compressed;
-
-  // Update URL without reload
   history.replaceState(null, '', '#' + compressed);
 
-  // Copy to clipboard
   navigator.clipboard.writeText(url).then(() => {
     showToast('🔗 Link copied! Share this URL with your shipping company');
   }).catch(() => {
-    // Fallback: select a temporary textarea
     const ta = document.createElement('textarea');
     ta.value = url;
     document.body.appendChild(ta);
@@ -679,7 +893,6 @@ async function exportPDF() {
   const contentW = pageW - margin * 2;
   let y = margin;
 
-  // --- Header ---
   doc.setFontSize(20);
   doc.setFont('helvetica', 'bold');
   doc.text('Container Calculator', margin, y + 7);
@@ -691,7 +904,6 @@ async function exportPDF() {
   doc.text('Generated ' + new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }), margin, y);
   y += 10;
 
-  // --- Stats ---
   const cont = CONTAINERS[containerSize];
   const totalVol = (cont.lengthIn * cont.widthIn * cont.heightIn / 1728).toFixed(0);
   const usedVol = totalUsedCuFt().toFixed(0);
@@ -709,7 +921,6 @@ async function exportPDF() {
   doc.text(`Used: ${usedVol} cu ft / ${totalVol} cu ft (${pct}%)    |    Items: ${itemCount}`, margin, y);
   y += 4;
 
-  // Fill bar
   doc.setDrawColor(180);
   doc.setFillColor(230, 230, 230);
   doc.roundedRect(margin, y, contentW, 5, 1, 1, 'FD');
@@ -721,7 +932,6 @@ async function exportPDF() {
   doc.roundedRect(margin, y, fillW, 5, 1, 1, 'F');
   y += 10;
 
-  // --- 3D Snapshot ---
   try {
     const canvas = renderer.domElement;
     const imgData = canvas.toDataURL('image/png');
@@ -734,15 +944,11 @@ async function exportPDF() {
     console.warn('Could not capture 3D view:', e);
   }
 
-  // --- Room-by-room inventory ---
   rooms.forEach((room, ri) => {
     const roomVol = roomVolumeCuFt(room);
     const roomItemCount = room.items.reduce((s, it) => s + it.qty, 0);
-
-    // Check if we need a new page
     if (y > 260) { doc.addPage(); y = margin; }
 
-    // Room header
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(0);
@@ -759,7 +965,6 @@ async function exportPDF() {
     doc.text(`${roomItemCount} items · ${roomVol} cu ft`, margin + doc.getTextWidth(`  ${room.name}  `) + 4, y);
     y += 5;
 
-    // Table header
     doc.setFontSize(7.5);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(100);
@@ -772,7 +977,6 @@ async function exportPDF() {
     doc.line(margin, y, margin + contentW, y);
     y += 3;
 
-    // Items
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(40);
     room.items.forEach(it => {
@@ -788,7 +992,6 @@ async function exportPDF() {
     y += 4;
   });
 
-  // --- Footer ---
   const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
@@ -800,3 +1003,8 @@ async function exportPDF() {
   doc.save(`container-${cont.label}-${new Date().toISOString().slice(0,10)}.pdf`);
   showToast('📄 PDF downloaded!');
 }
+
+// ============================================================
+// INIT ON LOAD
+// ============================================================
+window.addEventListener('DOMContentLoaded', init);
